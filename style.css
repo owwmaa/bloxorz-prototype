@@ -14,12 +14,22 @@ body {
 }
 h1 { font-size: 18px; font-weight: 500; margin: 0; }
 #app { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-#hud { display: flex; gap: 20px; font-size: 14px; color: #b8b4a8; }
+#hud { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #b8b4a8; }
+#skipBtn, #restartBtn {
+  background: none;
+  border: 1px solid #44483f;
+  color: #a8a498;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#restartBtn { margin-left: auto; }
+#skipBtn:hover, #restartBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
+#skipBtn:disabled { opacity: 0.35; cursor: default; }
 #playArea {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 20px;
+  justify-content: center;
 }
 canvas {
   background: #2b2f36;
@@ -29,25 +39,6 @@ canvas {
   max-height: 60vh;
   touch-action: none;
 }
-#dpad {
-  display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(3, 40px);
-  gap: 4px;
-  background: rgba(255,255,255,0.04);
-  padding: 10px;
-  border-radius: 14px;
-}
-#dpad button {
-  background: #33384a;
-  color: #cdd6f5;
-  border: none;
-  border-radius: 50%;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-#dpad button:active { background: #3b6fd9; color: #fff; }
 #rotatePrompt {
   display: none;
   min-height: 100vh;

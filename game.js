@@ -6,6 +6,8 @@ const ctx = canvas.getContext("2d");
 const levelLabel = document.getElementById("levelLabel");
 const movesLabel = document.getElementById("movesLabel");
 const message = document.getElementById("message");
+const skipBtn = document.getElementById("skipBtn");
+const restartBtn = document.getElementById("restartBtn");
 
 // ---- Isometric constants ----
 // HW/HH define the X and Y basis vectors on screen; ZS defines the height basis.
@@ -50,6 +52,7 @@ function loadLevel(i) {
   animating = false;
   levelLabel.textContent = `Level ${i + 1} / ${levels.length}`;
   movesLabel.textContent = `Moves: 0`;
+  skipBtn.disabled = i >= levels.length - 1;
   message.textContent = "";
   message.className = "";
   sizeCanvas();
@@ -92,40 +95,46 @@ function strokePoly(pts, color) {
   ctx.stroke();
 }
 
-function drawTiles() {
-  const order = [];
+function tileList() {
+  const list = [];
   for (let y = 0; y < gridRows; y++)
     for (let x = 0; x < gridCols; x++)
-      if (charAt(x, y) !== ".") order.push({ x, y });
-  order.sort((a, b) => (a.x + a.y) - (b.x + b.y));
+      if (charAt(x, y) !== ".") list.push({ x, y });
+  return list;
+}
 
-  order.forEach(({ x, y }) => {
-    const ch = charAt(x, y);
-    const isSwitch = switchState.some(sw => sw.pos.x === x && sw.pos.y === y);
-    const cx = x + 0.5, cy = y + 0.5;
-    const N = proj(cx - 0.5, cy - 0.5), E = proj(cx + 0.5, cy - 0.5);
-    const S = proj(cx + 0.5, cy + 0.5), W = proj(cx - 0.5, cy + 0.5);
-    if (ch === "G") {
-      fillPoly([N, E, S, W], "#3a2a22");
-      strokePoly([N, E, S, W], "#d97757");
-    } else {
-      const Sb = { x: S.x, y: S.y + THICK };
-      const Eb = { x: E.x, y: E.y + THICK };
-      const Wb = { x: W.x, y: W.y + THICK };
-      const weak = ch === "w";
-      fillPoly([W, S, Sb, Wb], weak ? "#3d2418" : "#23262c");
-      fillPoly([E, S, Sb, Eb], weak ? "#301b12" : "#191c20");
-      fillPoly([N, E, S, W], weak ? "#8a4a2c" : "#42464f");
-      if (weak) strokePoly([N, E, S, W], "#d9855b");
-      if (isSwitch) {
-        const mid = { x: (N.x + S.x) / 2, y: (N.y + S.y) / 2 };
-        ctx.fillStyle = "#e0a458";
-        ctx.beginPath();
-        ctx.arc(mid.x, mid.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-      }
+function paintTile(x, y) {
+  const ch = charAt(x, y);
+  const isSwitch = switchState.some(sw => sw.pos.x === x && sw.pos.y === y);
+  const cx = x + 0.5, cy = y + 0.5;
+  const N = proj(cx - 0.5, cy - 0.5), E = proj(cx + 0.5, cy - 0.5);
+  const S = proj(cx + 0.5, cy + 0.5), W = proj(cx - 0.5, cy + 0.5);
+  if (ch === "G") {
+    fillPoly([N, E, S, W], "#3a2a22");
+    strokePoly([N, E, S, W], "#d97757");
+  } else {
+    const Sb = { x: S.x, y: S.y + THICK };
+    const Eb = { x: E.x, y: E.y + THICK };
+    const Wb = { x: W.x, y: W.y + THICK };
+    const weak = ch === "w";
+    fillPoly([W, S, Sb, Wb], weak ? "#3d2418" : "#23262c");
+    fillPoly([E, S, Sb, Eb], weak ? "#301b12" : "#191c20");
+    fillPoly([N, E, S, W], weak ? "#8a4a2c" : "#42464f");
+    if (weak) strokePoly([N, E, S, W], "#d9855b");
+    if (isSwitch) {
+      const mid = { x: (N.x + S.x) / 2, y: (N.y + S.y) / 2 };
+      ctx.fillStyle = "#e0a458";
+      ctx.beginPath();
+      ctx.arc(mid.x, mid.y, 6, 0, Math.PI * 2);
+      ctx.fill();
     }
-  });
+  }
+}
+
+function drawTiles() {
+  const order = tileList();
+  order.sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  order.forEach(({ x, y }) => paintTile(x, y));
 }
 
 // ---- Block geometry: a rigid box in tile-units, corners labeled by role ----
@@ -298,7 +307,7 @@ function roll(dir) {
         locked = true;
         message.textContent = breaksWeak ? "The tile crumbled — resetting level" : "Fell off — resetting level";
         message.className = "lose";
-        fallAndReset(boxFromCells(next));
+        fallAndReset(boxFromCells(next), dir);
       } else {
         cells = next;
         moves++;
@@ -314,24 +323,102 @@ function roll(dir) {
   requestAnimationFrame(frame);
 }
 
-// The block keeps falling through the gap (accelerating, fading out) before the level resets.
-function fallAndReset(box) {
+// After the block has fallen out of view, the whole board shatters into individual
+// tiles that scatter and fade to black, pauses, then flies back together before
+// the level actually resets.
+function shatterBoard(done) {
+  const tiles = tileList();
+  const cx0 = canvas.width / 2, cy0 = canvas.height / 2;
+  const frags = tiles.map(({ x, y }) => {
+    const c = proj(x + 0.5, y + 0.5);
+    let dirX = c.x - cx0, dirY = c.y - cy0;
+    const len = Math.hypot(dirX, dirY) || 1;
+    dirX /= len; dirY /= len;
+    dirX += (Math.random() - 0.5) * 0.6;
+    dirY += (Math.random() - 0.5) * 0.6;
+    return {
+      x, y, dirX, dirY,
+      dist: 70 + Math.random() * 90,
+      spin: (Math.random() - 0.5) * 7,
+      gravity: 40 + Math.random() * 40
+    };
+  });
+
+  function paintFrag(f, t) {
+    const pivot = proj(f.x + 0.5, f.y + 0.5);
+    const dx = f.dirX * f.dist * t * t;
+    const dy = f.dirY * f.dist * t * t + f.gravity * t * t;
+    const rot = f.spin * t;
+    const scale = Math.max(0.05, 1 - 0.8 * t);
+    const alpha = Math.max(0, 1 - t);
+    ctx.save();
+    ctx.translate(pivot.x + dx, pivot.y + dy);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.translate(-pivot.x, -pivot.y);
+    ctx.globalAlpha = alpha;
+    paintTile(f.x, f.y);
+    ctx.restore();
+  }
+
+  const SHATTER_DUR = 650, BLACK_DUR = 300, REASSEMBLE_DUR = 520;
+
+  function runPhase(duration, tFrom, tTo, onDone) {
+    const t0 = performance.now();
+    function frame(now) {
+      const raw = Math.min(1, (now - t0) / duration);
+      const t = tFrom + (tTo - tFrom) * raw;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      frags.forEach(f => paintFrag(f, t));
+      if (raw < 1) requestAnimationFrame(frame);
+      else onDone();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  runPhase(SHATTER_DUR, 0, 1, () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // black pause
+    setTimeout(() => runPhase(REASSEMBLE_DUR, 1, 0, done), BLACK_DUR);
+  });
+}
+
+// The block keeps tumbling — spinning the same direction it was already tipping,
+// drifting forward off the ledge, and accelerating downward — until it's genuinely
+// off the bottom of the screen, then the level resets.
+function fallAndReset(box, dir) {
   playFallSound();
   const t0 = performance.now();
-  const FALL_DURATION = 480;
+  const travelVec = {
+    x: dir === "right" ? 1 : dir === "left" ? -1 : 0,
+    y: dir === "down" ? 1 : dir === "up" ? -1 : 0
+  };
+  const spinSpeed = 5.2;   // rad/s — continues the same rotational sense as the roll
+  const MAX_DURATION = 1500;
 
   function frame(now) {
-    const t = Math.min(1, (now - t0) / FALL_DURATION);
-    const zDrop = t * t * 3.5;   // accelerating descent, in tile-units
-    const alpha = 1 - t * 0.95;  // fades out as it drops
+    const el = (now - t0) / 1000;
+    const phi = Math.PI / 2 + spinSpeed * el;
+    const travel = 3.2 * el * el;       // accelerating drift off the ledge
+    const gravityDrop = 150 * el * el;  // accelerating fall (px)
+    const alpha = Math.max(0, 1 - el / 1.3);
+
+    const shiftedBox = {
+      ...box,
+      cx: box.cx + travelVec.x * travel,
+      cy: box.cy + travelVec.y * travel
+    };
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawTiles();
     ctx.save();
-    ctx.globalAlpha = Math.max(0, alpha);
-    drawBlock(box, null, 0, zDrop);
+    ctx.globalAlpha = alpha;
+    drawBlock(shiftedBox, dir, phi, gravityDrop);
     ctx.restore();
-    if (t < 1) requestAnimationFrame(frame);
-    else loadLevel(levelIndex);
+
+    const centerScreen = proj(shiftedBox.cx, shiftedBox.cy, -gravityDrop);
+    const offScreen = centerScreen.y > canvas.height + 60;
+    if (!offScreen && now - t0 < MAX_DURATION) requestAnimationFrame(frame);
+    else shatterBoard(() => loadLevel(levelIndex));
   }
   requestAnimationFrame(frame);
 }
@@ -345,7 +432,7 @@ function checkWin() {
       message.className = "win";
       setTimeout(() => loadLevel(levelIndex + 1), 900);
     } else {
-      message.textContent = `All levels solved — ${moves} moves on this one. Nice.`;
+      message.textContent = `All levels solved — ${moves} moves on this one. Nice. Hit Restart to play again.`;
       message.className = "win";
     }
   }
@@ -360,9 +447,15 @@ window.addEventListener("keydown", e => {
   if (dir) { e.preventDefault(); roll(dir); }
 });
 
-document.querySelectorAll("#dpad button").forEach(b =>
-  b.addEventListener("click", () => roll(b.dataset.dir))
-);
+skipBtn.addEventListener("click", () => {
+  if (animating) return; // avoid racing an in-flight roll/fall animation
+  if (levelIndex < levels.length - 1) loadLevel(levelIndex + 1);
+});
+
+restartBtn.addEventListener("click", () => {
+  if (animating) return;
+  loadLevel(0);
+});
 
 let touchStartX, touchStartY;
 canvas.addEventListener("touchstart", e => {
@@ -377,6 +470,10 @@ canvas.addEventListener("touchend", e => {
   const absX = Math.abs(dx), absY = Math.abs(dy);
   touchStartX = undefined;
   if (Math.max(absX, absY) < 24) return; // too small — treat as a tap, ignore
+  // If the swipe is too close to diagonal, the intended direction is ambiguous —
+  // better to ignore it than guess wrong and roll the block off a ledge.
+  const bigger = Math.max(absX, absY), smaller = Math.min(absX, absY);
+  if (smaller / bigger > 0.6) return;
   roll(absX > absY ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
 });
 
