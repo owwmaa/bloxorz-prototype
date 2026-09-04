@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bloxorz Prototype</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="rotatePrompt">
+    <div class="icon">⟳</div>
+    <div>Rotate your device to landscape for the best experience.</div>
+  </div>
+  <div id="app">
+    <h1>Bloxorz Prototype</h1>
+    <div id="hud">
+      <span id="levelLabel">Level 1 / 3</span>
+      <span id="movesLabel">Moves: 0</span>
+    </div>
+    <div id="playArea">
+      <canvas id="board"></canvas>
+      <div id="dpad">
+        <div></div><button data-dir="up">▲</button><div></div>
+        <button data-dir="left">◀</button><div></div><button data-dir="right">▶</button>
+        <div></div><button data-dir="down">▼</button><div></div>
+      </div>
+    </div>
+    <div id="message"></div>
+    <div id="controls">
+      Swipe the board, use the buttons, or arrow keys / WASD to roll the block.
+      Reach the dark goal tile <b>standing upright</b> to win. Orange tiles are fragile —
+      crossing them lying down is safe, standing on them breaks them.
+    </div>
+  </div>
+
+  <script src="levels.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
