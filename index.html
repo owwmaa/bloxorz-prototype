@@ -64,15 +64,23 @@
     </div>
     <div id="message"></div>
     <div id="controls">
-      Swipe the board, or use arrow keys / WASD, to roll the block.
-      Reach the dark goal tile <b>standing upright</b> to win. Orange tiles are fragile —
-      crossing them lying down is safe, standing on them breaks them.
+      Swipe diagonally (↖↗↙↘) to roll the block — matches the direction it visually
+      tips. Arrow keys / WASD work as normal up/down/left/right. Reach the dark goal
+      tile <b>standing upright</b> to win. Orange tiles are fragile — crossing them
+      lying down is safe, standing on them breaks them.
     </div>
   </div>
 
   <div id="introOverlay">
     <div class="overlayBox">
-      <p>Swipe the board (or use arrow keys) to roll the block.</p>
+      <p>This game uses an isometric camera — swipe <b>diagonally</b>, matching the
+      direction the block actually rolls on screen:</p>
+      <div class="swipeDiagram">
+        <div class="swipeArrow ul">↖<span>Left</span></div>
+        <div class="swipeArrow ur">↗<span>Up</span></div>
+        <div class="swipeArrow dl">↙<span>Down</span></div>
+        <div class="swipeArrow dr">↘<span>Right</span></div>
+      </div>
       <p>Land <b>standing upright</b> on the glowing tile to win.</p>
       <button id="dismissIntroBtn" class="primaryBtn">Got it</button>
     </div>

@@ -529,13 +529,21 @@ playArea.addEventListener("touchmove", e => {
   const t = e.touches[0];
   const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
   const absX = Math.abs(dx), absY = Math.abs(dy);
-  if (Math.max(absX, absY) < 18) return; // still too small to tell — keep waiting
-  // If the drag is too close to diagonal, the intended direction is ambiguous —
-  // better to keep waiting for it to clarify than guess wrong.
-  const bigger = Math.max(absX, absY), smaller = Math.min(absX, absY);
-  if (smaller / bigger > 0.65) return;
-  touchHandled = true; // fire once per touch, right when the direction becomes clear
-  roll(absX > absY ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+  const mag = Math.max(absX, absY);
+  if (mag < 18) return; // still too small to tell — keep waiting
+  // Our camera is isometric, so each roll direction visually moves the block
+  // along a screen DIAGONAL, not a cardinal direction — a near-horizontal or
+  // near-vertical swipe is the ambiguous case here (the opposite of a cardinal
+  // control scheme), so wait for the swipe to clearly commit to one diagonal.
+  const smaller = Math.min(absX, absY);
+  if (smaller / mag < 0.4) return;
+  touchHandled = true;
+  let dir;
+  if (dx > 0 && dy < 0) dir = "up";       // screen up-right
+  else if (dx > 0 && dy > 0) dir = "right"; // screen down-right
+  else if (dx < 0 && dy > 0) dir = "down";  // screen down-left
+  else dir = "left";                        // screen up-left
+  roll(dir);
 }, { passive: false });
 playArea.addEventListener("touchend", () => {
   touchStartX = undefined;
