@@ -124,17 +124,21 @@ h1 { font-size: 18px; font-weight: 500; margin: 0; }
 #restartBtn { margin-left: auto; }
 #skipBtn:hover, #restartBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
 #skipBtn:disabled { opacity: 0.35; cursor: default; }
+#app { height: 90vh; height: 90dvh; }
 #playArea {
   display: flex;
   justify-content: center;
+  align-items: center;
   touch-action: none;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
 }
 canvas {
   background: #2b2f36;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  max-width: 92vw;
-  max-height: 68vh;
   touch-action: none;
 }
 #editorSizeRow { display: flex; gap: 14px; align-items: center; font-size: 13px; color: #b8b4a8; }

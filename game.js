@@ -98,7 +98,21 @@ function sizeCanvas() {
   canvas.height = (maxY - minY) + pad * 2;
   originX = -minX + pad;
   originY = -minY + pad;
+  fitCanvasDisplay();
 }
+
+// Scales the canvas's on-screen SIZE (not its drawing resolution) up or down to
+// fill whatever space is actually available, preserving aspect ratio — this is
+// what makes small levels fill the screen instead of sitting in empty space.
+function fitCanvasDisplay() {
+  const container = document.getElementById("playArea");
+  const w = container.clientWidth, h = container.clientHeight;
+  if (!w || !h || !canvas.width || !canvas.height) return;
+  const scale = Math.min(w / canvas.width, h / canvas.height);
+  canvas.style.width = (canvas.width * scale) + "px";
+  canvas.style.height = (canvas.height * scale) + "px";
+}
+window.addEventListener("resize", fitCanvasDisplay);
 
 function fillPoly(pts, color) {
   ctx.fillStyle = color;
