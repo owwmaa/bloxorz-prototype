@@ -516,24 +516,29 @@ document.getElementById("menuBtn").addEventListener("click", () => {
   if (typeof showScreen === "function") showScreen(document.getElementById("homeScreen"));
 });
 
-let touchStartX, touchStartY;
-canvas.addEventListener("touchstart", e => {
+const playArea = document.getElementById("playArea");
+let touchStartX, touchStartY, touchHandled;
+playArea.addEventListener("touchstart", e => {
   const t = e.touches[0];
   touchStartX = t.clientX; touchStartY = t.clientY;
+  touchHandled = false;
 }, { passive: true });
-canvas.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-canvas.addEventListener("touchend", e => {
-  if (touchStartX === undefined) return;
-  const t = e.changedTouches[0];
+playArea.addEventListener("touchmove", e => {
+  e.preventDefault();
+  if (touchHandled || touchStartX === undefined) return;
+  const t = e.touches[0];
   const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
   const absX = Math.abs(dx), absY = Math.abs(dy);
-  touchStartX = undefined;
-  if (Math.max(absX, absY) < 24) return; // too small — treat as a tap, ignore
-  // If the swipe is too close to diagonal, the intended direction is ambiguous —
-  // better to ignore it than guess wrong and roll the block off a ledge.
+  if (Math.max(absX, absY) < 18) return; // still too small to tell — keep waiting
+  // If the drag is too close to diagonal, the intended direction is ambiguous —
+  // better to keep waiting for it to clarify than guess wrong.
   const bigger = Math.max(absX, absY), smaller = Math.min(absX, absY);
-  if (smaller / bigger > 0.6) return;
+  if (smaller / bigger > 0.65) return;
+  touchHandled = true; // fire once per touch, right when the direction becomes clear
   roll(absX > absY ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+}, { passive: false });
+playArea.addEventListener("touchend", () => {
+  touchStartX = undefined;
 });
 
 // Called by menu.js once the player picks New Game / Continue / a specific level —
