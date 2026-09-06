@@ -2,10 +2,11 @@
 const homeScreen = document.getElementById("homeScreen");
 const levelSelectScreen = document.getElementById("levelSelectScreen");
 const gameScreen = document.getElementById("app");
+const editorScreen = document.getElementById("editorScreen");
 const introOverlay = document.getElementById("introOverlay");
 
 function showScreen(el) {
-  [homeScreen, levelSelectScreen, gameScreen].forEach(s => s.classList.remove("active"));
+  [homeScreen, levelSelectScreen, gameScreen, editorScreen].forEach(s => s.classList.remove("active"));
   el.classList.add("active");
 }
 

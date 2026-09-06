@@ -28,9 +28,12 @@ Then visit `http://localhost:8000`.
 - `game.js` — rendering (isometric projection, tile/block drawing), the roll
   physics, win/lose rules, animation, sound, and input handling (keyboard,
   touch swipe). Exposes `startGame(levelIndex)` for menu.js to call.
-- `menu.js` — screen switching (home / level select / game), saved progress
-  (`localStorage`, so "Continue" resumes where you left off), the level
-  select grid, and the one-time first-run controls overlay
+- `menu.js` — screen switching (home / level select / game / editor), saved
+  progress (`localStorage`, so "Continue" resumes where you left off), the
+  level select grid, and the one-time first-run controls overlay
+- `editor.js` — the visual level editor: click-to-paint grid, resize, export
+  as pasteable level code, and test-play a level directly without adding it
+  to `levels.js` first
 
 ## Flow
 
@@ -48,16 +51,19 @@ Each level is a grid of characters plus a start position:
 - `G` goal — win by landing here **standing upright**
 - `w` fragile tile — breaks if stood on, safe to cross while lying flat
 
-Optional `switches` array — each switch has a `pos`, a list of `bridge`
-cells that start closed (void) and flip to floor when the switch is
-touched (touching it again toggles back), and an initial `open` state.
+Optional `switches` array — each switch has a `pos`, a `type` (`"soft"` — an
+O-marked switch that triggers on any touch, standing or lying; `"hard"` — an
+X-marked switch that only triggers when the block is standing upright on it),
+a list of `bridge` cells that start closed (void) and flip to floor when the
+switch is touched (touching it again toggles back), and an initial `open`
+state.
 
 ```js
 {
   grid: ["###..###wG"],
   start: { x: 0, y: 0 },
   switches: [
-    { pos: { x: 2, y: 0 }, bridge: [{ x: 3, y: 0 }, { x: 4, y: 0 }], open: false }
+    { pos: { x: 2, y: 0 }, type: "soft", bridge: [{ x: 3, y: 0 }, { x: 4, y: 0 }], open: false }
   ]
 }
 ```

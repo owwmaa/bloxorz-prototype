@@ -13,6 +13,7 @@
       <button id="newGameBtn" class="primaryBtn">Start New Game</button>
       <button id="continueBtn" class="primaryBtn">Continue</button>
       <button id="levelsBtn" class="primaryBtn">Levels</button>
+      <button id="editorBtn" class="primaryBtn">Level Editor</button>
     </div>
   </div>
 
@@ -20,6 +21,34 @@
     <h1>Select a Level</h1>
     <div id="levelGrid"></div>
     <button id="backFromLevelsBtn" class="ghostBtn">← Back</button>
+  </div>
+
+  <div id="editorScreen" class="screen">
+    <h1>Level Editor</h1>
+    <div id="editorSizeRow">
+      <label>Rows <input type="number" id="editorRowsInput" value="8" min="1" max="20"></label>
+      <label>Cols <input type="number" id="editorColsInput" value="12" min="1" max="20"></label>
+      <button id="editorResizeBtn" class="ghostBtn">Resize</button>
+    </div>
+    <div id="editorToolbar">
+      <button class="toolBtn active" data-tool="floor">Floor</button>
+      <button class="toolBtn" data-tool="void">Erase</button>
+      <button class="toolBtn" data-tool="weak">Weak</button>
+      <button class="toolBtn" data-tool="goal">Goal</button>
+      <button class="toolBtn" data-tool="start">Start</button>
+      <button class="toolBtn" data-tool="switchO">Switch O</button>
+      <button class="toolBtn" data-tool="switchX">Switch X</button>
+    </div>
+    <div id="editorHint"></div>
+    <div id="editorGrid"></div>
+    <div id="editorActions">
+      <button id="editorTestBtn" class="primaryBtn">Test Play</button>
+      <button id="editorExportBtn" class="primaryBtn">Export</button>
+      <button id="editorClearBtn" class="ghostBtn">Clear</button>
+    </div>
+    <textarea id="editorExportOutput" rows="8" readonly></textarea>
+    <div id="editorMessage"></div>
+    <button id="backFromEditorBtn" class="ghostBtn">← Back</button>
   </div>
 
   <div id="app" class="screen">
@@ -52,5 +81,6 @@
   <script src="levels.js"></script>
   <script src="game.js"></script>
   <script src="menu.js"></script>
+  <script src="editor.js"></script>
 </body>
 </html>

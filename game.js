@@ -39,9 +39,10 @@ function proj(X, Y, Z = 0) {
   return { x: originX + (X - Y) * HW, y: originY + (X + Y) * HH - Z * ZS };
 }
 
-function loadLevel(i) {
-  levelIndex = i;
-  const lvl = levels[i];
+let testMode = false;
+let testLevelObj = null;
+
+function applyLevel(lvl) {
   grid = lvl.grid;
   gridRows = grid.length;
   gridCols = Math.max(...grid.map(r => r.length));
@@ -50,14 +51,35 @@ function loadLevel(i) {
   moves = 0;
   locked = false;
   animating = false;
-  levelLabel.textContent = `Level ${i + 1} / ${levels.length}`;
   movesLabel.textContent = `Moves: 0`;
-  skipBtn.disabled = i >= levels.length - 1;
-  if (typeof saveProgress === "function") saveProgress(i);
   message.textContent = "";
   message.className = "";
   sizeCanvas();
   renderStatic();
+}
+
+function loadLevel(i) {
+  testMode = false;
+  levelIndex = i;
+  applyLevel(levels[i]);
+  levelLabel.textContent = `Level ${i + 1} / ${levels.length}`;
+  skipBtn.disabled = i >= levels.length - 1;
+  if (typeof saveProgress === "function") saveProgress(i);
+}
+
+// Used by the level editor's "Test Play" — plays an arbitrary level object
+// that isn't part of the real level list, without touching saved progress.
+function loadCustomLevel(lvl) {
+  testMode = true;
+  testLevelObj = lvl;
+  applyLevel(lvl);
+  levelLabel.textContent = "Test Level";
+  skipBtn.disabled = true;
+}
+
+function reloadCurrent() {
+  if (testMode) loadCustomLevel(testLevelObj);
+  else loadLevel(levelIndex);
 }
 
 function sizeCanvas() {
@@ -106,7 +128,7 @@ function tileList() {
 
 function paintTile(x, y) {
   const ch = charAt(x, y);
-  const isSwitch = switchState.some(sw => sw.pos.x === x && sw.pos.y === y);
+  const sw = switchState.find(s => s.pos.x === x && s.pos.y === y);
   const cx = x + 0.5, cy = y + 0.5;
   const N = proj(cx - 0.5, cy - 0.5), E = proj(cx + 0.5, cy - 0.5);
   const S = proj(cx + 0.5, cy + 0.5), W = proj(cx - 0.5, cy + 0.5);
@@ -122,12 +144,23 @@ function paintTile(x, y) {
     fillPoly([E, S, Sb, Eb], weak ? "#301b12" : "#191c20");
     fillPoly([N, E, S, W], weak ? "#8a4a2c" : "#42464f");
     if (weak) strokePoly([N, E, S, W], "#d9855b");
-    if (isSwitch) {
+    if (sw) {
       const mid = { x: (N.x + S.x) / 2, y: (N.y + S.y) / 2 };
-      ctx.fillStyle = "#e0a458";
-      ctx.beginPath();
-      ctx.arc(mid.x, mid.y, 6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.strokeStyle = "#e0a458";
+      ctx.lineWidth = 2.5;
+      if (sw.type === "hard") {
+        // X mark — only triggers when the block is standing upright on it
+        ctx.beginPath();
+        ctx.moveTo(mid.x - 6, mid.y - 6); ctx.lineTo(mid.x + 6, mid.y + 6);
+        ctx.moveTo(mid.x + 6, mid.y - 6); ctx.lineTo(mid.x - 6, mid.y + 6);
+        ctx.stroke();
+      } else {
+        // O mark — triggers on any touch, standing or lying
+        ctx.fillStyle = "#e0a458";
+        ctx.beginPath();
+        ctx.arc(mid.x, mid.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 }
@@ -330,7 +363,10 @@ function roll(dir) {
         moves++;
         movesLabel.textContent = `Moves: ${moves}`;
         for (const sw of switchState) {
-          if (cells.some(c => c.x === sw.pos.x && c.y === sw.pos.y)) sw.open = !sw.open;
+          const touching = cells.some(c => c.x === sw.pos.x && c.y === sw.pos.y);
+          const standingOnIt = cells.length === 1 && cells[0].x === sw.pos.x && cells[0].y === sw.pos.y;
+          const triggers = sw.type === "hard" ? standingOnIt : touching;
+          if (triggers) sw.open = !sw.open;
         }
         renderStatic();
         checkWin();
@@ -434,7 +470,7 @@ function fallAndReset(box, dir) {
     const centerScreen = proj(shiftedBox.cx, shiftedBox.cy, -gravityDrop);
     const offScreen = centerScreen.y > canvas.height + 60;
     if (!offScreen && now - t0 < MAX_DURATION) requestAnimationFrame(frame);
-    else shatterBoard(() => loadLevel(levelIndex));
+    else shatterBoard(() => reloadCurrent());
   }
   requestAnimationFrame(frame);
 }
@@ -443,7 +479,10 @@ function checkWin() {
   if (cells.length === 1 && charAt(cells[0].x, cells[0].y) === "G") {
     locked = true;
     playWinSound();
-    if (levelIndex < levels.length - 1) {
+    if (testMode) {
+      message.textContent = `Solved in ${moves} moves! (test level)`;
+      message.className = "win";
+    } else if (levelIndex < levels.length - 1) {
       message.textContent = `Solved in ${moves} moves! Next level…`;
       message.className = "win";
       setTimeout(() => loadLevel(levelIndex + 1), 900);
@@ -464,13 +503,13 @@ window.addEventListener("keydown", e => {
 });
 
 skipBtn.addEventListener("click", () => {
-  if (animating) return; // avoid racing an in-flight roll/fall animation
+  if (animating || testMode) return; // avoid racing an in-flight roll/fall animation
   if (levelIndex < levels.length - 1) loadLevel(levelIndex + 1);
 });
 
 restartBtn.addEventListener("click", () => {
   if (animating) return;
-  loadLevel(0);
+  reloadCurrent();
 });
 
 document.getElementById("menuBtn").addEventListener("click", () => {
