@@ -1,5 +1,7 @@
 # Bloxorz Prototype
 
+**All rights reserved — see [LICENSE](./LICENSE).**
+
 A browser-based prototype of a Bloxorz-style tilt/roll puzzle game — isometric
 board, a rigid block that physically rotates over its pivot edge (real 3D
 rotation math, not a faked animation), weak tiles, switches/bridges, touch +
@@ -19,13 +21,23 @@ Then visit `http://localhost:8000`.
 
 ## Project structure
 
-- `index.html` — page structure only
-- `style.css` — all styling, including the portrait/landscape layout switch
+- `index.html` — page structure: home screen, level-select screen, the game screen, and the intro overlay
+- `style.css` — all styling, including the screen system. Portrait is the intended orientation.
 - `levels.js` — level data (grids, start position, switches). Edit this to
   add or change levels without touching any game logic.
 - `game.js` — rendering (isometric projection, tile/block drawing), the roll
   physics, win/lose rules, animation, sound, and input handling (keyboard,
-  touch swipe, on-screen d-pad)
+  touch swipe). Exposes `startGame(levelIndex)` for menu.js to call.
+- `menu.js` — screen switching (home / level select / game), saved progress
+  (`localStorage`, so "Continue" resumes where you left off), the level
+  select grid, and the one-time first-run controls overlay
+
+## Flow
+
+Home screen → **Start New Game** (level 1), **Continue** (resumes your last
+level), or **Levels** (jump to any level directly). The controls overlay
+shows once per browser, the first time you actually enter gameplay. In-game,
+the ☰ button in the HUD returns to the home screen at any time.
 
 ## Level format
 

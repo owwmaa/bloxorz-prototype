@@ -53,6 +53,7 @@ function loadLevel(i) {
   levelLabel.textContent = `Level ${i + 1} / ${levels.length}`;
   movesLabel.textContent = `Moves: 0`;
   skipBtn.disabled = i >= levels.length - 1;
+  if (typeof saveProgress === "function") saveProgress(i);
   message.textContent = "";
   message.className = "";
   sizeCanvas();
@@ -249,8 +250,20 @@ function easeInOutQuad(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2
 
 // ---- Sound (synthesized, no audio files needed) ----
 let audioCtx;
+let fallBuffer = null;
+function loadFallBuffer() {
+  if (fallBuffer || !audioCtx) return;
+  fetch("faaah.mp3")
+    .then(r => r.arrayBuffer())
+    .then(buf => audioCtx.decodeAudioData(buf))
+    .then(decoded => { fallBuffer = decoded; })
+    .catch(() => {}); // if it can't load/decode, playFallSound just stays silent rather than erroring
+}
 function ensureAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    loadFallBuffer();
+  }
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 function playTone(freq, dur, type, gainAmt) {
@@ -267,15 +280,14 @@ function playTone(freq, dur, type, gainAmt) {
 function playRollSound() { playTone(140, 0.09, "square", 0.10); }
 function playFallSound() {
   ensureAudio();
-  const osc = audioCtx.createOscillator();
+  if (!fallBuffer) return; // recording hasn't finished loading yet — skip silently
+  const src = audioCtx.createBufferSource();
+  src.buffer = fallBuffer;
   const gain = audioCtx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(320, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(55, audioCtx.currentTime + 0.45);
-  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
-  osc.connect(gain); gain.connect(audioCtx.destination);
-  osc.start(); osc.stop(audioCtx.currentTime + 0.45);
+  gain.gain.value = 0.9;
+  src.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start();
 }
 function playWinSound() {
   [523.25, 659.25, 783.99].forEach((f, i) =>
@@ -288,7 +300,14 @@ function roll(dir) {
   const next = computeRoll(dir, cells);
   if (!next) return;
 
-  playRollSound();
+  const willFall = next.some(c => charAt(c.x, c.y) === ".");
+  const breaksWeak = !willFall && next.length === 1 && charAt(next[0].x, next[0].y) === "w";
+  const failing = willFall || breaksWeak;
+
+  // Trigger the sound the instant the move starts, not after the tip animation
+  // finishes — we already know the outcome, no need to wait to reveal it.
+  if (failing) playFallSound(); else playRollSound();
+
   const startBox = boxFromCells(cells);
   animating = true;
   const t0 = performance.now();
@@ -301,9 +320,7 @@ function roll(dir) {
       requestAnimationFrame(frame);
     } else {
       animating = false;
-      const willFall = next.some(c => charAt(c.x, c.y) === ".");
-      const breaksWeak = !willFall && next.length === 1 && charAt(next[0].x, next[0].y) === "w";
-      if (willFall || breaksWeak) {
+      if (failing) {
         locked = true;
         message.textContent = breaksWeak ? "The tile crumbled — resetting level" : "Fell off — resetting level";
         message.className = "lose";
@@ -386,7 +403,6 @@ function shatterBoard(done) {
 // drifting forward off the ledge, and accelerating downward — until it's genuinely
 // off the bottom of the screen, then the level resets.
 function fallAndReset(box, dir) {
-  playFallSound();
   const t0 = performance.now();
   const travelVec = {
     x: dir === "right" ? 1 : dir === "left" ? -1 : 0,
@@ -457,6 +473,10 @@ restartBtn.addEventListener("click", () => {
   loadLevel(0);
 });
 
+document.getElementById("menuBtn").addEventListener("click", () => {
+  if (typeof showScreen === "function") showScreen(document.getElementById("homeScreen"));
+});
+
 let touchStartX, touchStartY;
 canvas.addEventListener("touchstart", e => {
   const t = e.touches[0];
@@ -477,8 +497,8 @@ canvas.addEventListener("touchend", e => {
   roll(absX > absY ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
 });
 
-loadLevel(0);
-
-if (screen.orientation && screen.orientation.lock) {
-  screen.orientation.lock("landscape").catch(() => {});
+// Called by menu.js once the player picks New Game / Continue / a specific level —
+// the game no longer auto-starts on page load, since there's a home screen first.
+function startGame(levelIdx) {
+  loadLevel(levelIdx);
 }

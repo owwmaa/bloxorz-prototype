@@ -7,13 +7,24 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="rotatePrompt">
-    <div class="icon">⟳</div>
-    <div>Rotate your device to landscape for the best experience.</div>
-  </div>
-  <div id="app">
+  <div id="homeScreen" class="screen active">
     <h1>Bloxorz Prototype</h1>
+    <div class="menuButtons">
+      <button id="newGameBtn" class="primaryBtn">Start New Game</button>
+      <button id="continueBtn" class="primaryBtn">Continue</button>
+      <button id="levelsBtn" class="primaryBtn">Levels</button>
+    </div>
+  </div>
+
+  <div id="levelSelectScreen" class="screen">
+    <h1>Select a Level</h1>
+    <div id="levelGrid"></div>
+    <button id="backFromLevelsBtn" class="ghostBtn">← Back</button>
+  </div>
+
+  <div id="app" class="screen">
     <div id="hud">
+      <button id="menuBtn">☰</button>
       <span id="levelLabel">Level 1 / 3</span>
       <span id="movesLabel">Moves: 0</span>
       <button id="restartBtn">Restart ↺</button>
@@ -30,7 +41,16 @@
     </div>
   </div>
 
+  <div id="introOverlay">
+    <div class="overlayBox">
+      <p>Swipe the board (or use arrow keys) to roll the block.</p>
+      <p>Land <b>standing upright</b> on the glowing tile to win.</p>
+      <button id="dismissIntroBtn" class="primaryBtn">Got it</button>
+    </div>
+  </div>
+
   <script src="levels.js"></script>
   <script src="game.js"></script>
+  <script src="menu.js"></script>
 </body>
 </html>

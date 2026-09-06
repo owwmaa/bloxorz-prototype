@@ -13,8 +13,83 @@ body {
   box-sizing: border-box;
 }
 h1 { font-size: 18px; font-weight: 500; margin: 0; }
-#app { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.screen { display: none; flex-direction: column; align-items: center; gap: 14px; }
+.screen.active { display: flex; }
+
+.menuButtons { display: flex; flex-direction: column; gap: 10px; width: 220px; }
+.primaryBtn {
+  background: #3b6fd9;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.primaryBtn:hover { background: #2a5bc2; }
+.ghostBtn {
+  background: none;
+  border: 1px solid #44483f;
+  color: #a8a498;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ghostBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
+
+#levelGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 320px;
+  justify-content: center;
+}
+#levelGrid button {
+  width: 44px;
+  height: 44px;
+  background: #33384a;
+  color: #cdd6f5;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+#levelGrid button:hover { background: #3b6fd9; color: #fff; }
+
+#introOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+#introOverlay.show { display: flex; }
+.overlayBox {
+  background: #2b2f36;
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 320px;
+  text-align: center;
+  line-height: 1.6;
+  font-size: 14px;
+}
+.overlayBox p { margin: 0 0 12px; }
+.overlayBox button { margin-top: 6px; }
+
 #hud { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #b8b4a8; }
+#menuBtn {
+  background: none;
+  border: 1px solid #44483f;
+  color: #a8a498;
+  font-size: 14px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#menuBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
 #skipBtn, #restartBtn {
   background: none;
   border: 1px solid #44483f;
@@ -38,23 +113,6 @@ canvas {
   max-width: 70vw;
   max-height: 60vh;
   touch-action: none;
-}
-#rotatePrompt {
-  display: none;
-  min-height: 100vh;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 16px;
-  text-align: center;
-  padding: 30px;
-  box-sizing: border-box;
-}
-#rotatePrompt .icon { font-size: 40px; }
-@media (orientation: portrait) and (max-width: 700px) {
-  #app { display: none; }
-  #rotatePrompt { display: flex; }
 }
 #message { min-height: 24px; font-size: 15px; font-weight: 500; }
 #message.win { color: #6fcf97; }
