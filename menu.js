@@ -3,10 +3,11 @@ const homeScreen = document.getElementById("homeScreen");
 const levelSelectScreen = document.getElementById("levelSelectScreen");
 const gameScreen = document.getElementById("app");
 const editorScreen = document.getElementById("editorScreen");
+const feedbackScreen = document.getElementById("feedbackScreen");
 const introOverlay = document.getElementById("introOverlay");
 
 function showScreen(el) {
-  [homeScreen, levelSelectScreen, gameScreen, editorScreen].forEach(s => s.classList.remove("active"));
+  [homeScreen, levelSelectScreen, gameScreen, editorScreen, feedbackScreen].forEach(s => s.classList.remove("active"));
   el.classList.add("active");
 }
 
@@ -77,4 +78,16 @@ document.getElementById("levelsBtn").addEventListener("click", () => {
 
 document.getElementById("backFromLevelsBtn").addEventListener("click", () => {
   showScreen(homeScreen);
+});
+
+document.getElementById("feedbackBtn").addEventListener("click", () => {
+  showScreen(feedbackScreen);
+});
+
+document.getElementById("backFromFeedbackBtn").addEventListener("click", () => {
+  showScreen(homeScreen);
+});
+
+document.getElementById("feedbackPromptBtn").addEventListener("click", () => {
+  showScreen(feedbackScreen);
 });

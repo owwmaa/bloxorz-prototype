@@ -8,12 +8,18 @@
 </head>
 <body>
   <div id="homeScreen" class="screen active">
-    <h1>Bloxorz Prototype</h1>
+    <svg class="logoIcon" width="50" height="64" viewBox="0 0 100 125">
+      <polygon points="50,8 92,30 50,52 8,30" fill="#4a7de8"/>
+      <polygon points="8,30 50,52 50,117 8,95" fill="#2a4fa0"/>
+      <polygon points="92,30 50,52 50,117 92,95" fill="#1f3a80"/>
+    </svg>
+    <h1>Blox Prototype</h1>
     <div class="menuButtons">
       <button id="newGameBtn" class="primaryBtn">Start New Game</button>
       <button id="continueBtn" class="primaryBtn">Continue</button>
       <button id="levelsBtn" class="primaryBtn">Levels</button>
       <button id="editorBtn" class="primaryBtn">Level Editor</button>
+      <button id="feedbackBtn" class="primaryBtn">Feedback</button>
     </div>
   </div>
 
@@ -38,6 +44,8 @@
       <button class="toolBtn" data-tool="start">Start</button>
       <button class="toolBtn" data-tool="switchO">Switch O</button>
       <button class="toolBtn" data-tool="switchX">Switch X</button>
+      <button class="toolBtn" data-tool="switchOpen">Open-only</button>
+      <button class="toolBtn" data-tool="switchClose">Close-only</button>
     </div>
     <div id="editorHint"></div>
     <div id="editorGrid"></div>
@@ -51,6 +59,14 @@
     <button id="backFromEditorBtn" class="ghostBtn">← Back</button>
   </div>
 
+  <div id="feedbackScreen" class="screen">
+    <h1>Feedback</h1>
+    <iframe id="feedbackFrame"
+      src="https://docs.google.com/forms/d/e/1FAIpQLSf_nRNwVNk8-BLihslbTvUaWXIpXV4xH4hpgrI9hcrQbOxdHw/viewform?embedded=true">
+    </iframe>
+    <button id="backFromFeedbackBtn" class="ghostBtn">← Back</button>
+  </div>
+
   <div id="app" class="screen">
     <div id="hud">
       <button id="menuBtn">☰</button>
@@ -61,14 +77,11 @@
     </div>
     <div id="playArea">
       <canvas id="board"></canvas>
+      <div id="winFlash"></div>
+      <div id="winBanner"><div class="winBannerText"></div></div>
     </div>
     <div id="message"></div>
-    <div id="controls">
-      Swipe diagonally (↖↗↙↘) to roll the block — matches the direction it visually
-      tips. Arrow keys / WASD work as normal up/down/left/right. Reach the dark goal
-      tile <b>standing upright</b> to win. Orange tiles are fragile — crossing them
-      lying down is safe, standing on them breaks them.
-    </div>
+    <button id="feedbackPromptBtn" class="primaryBtn" style="display:none">Give Feedback</button>
   </div>
 
   <div id="introOverlay">

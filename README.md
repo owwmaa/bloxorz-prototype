@@ -54,8 +54,11 @@ Each level is a grid of characters plus a start position:
 Optional `switches` array — each switch has a `pos`, a `type` (`"soft"` — an
 O-marked switch that triggers on any touch, standing or lying; `"hard"` — an
 X-marked switch that only triggers when the block is standing upright on it),
-a list of `bridge` cells that start closed (void) and flip to floor when the
-switch is touched (touching it again toggles back), and an initial `open`
+an optional `action` (`"open"` — a `+`-marked one-way switch that only ever
+opens its bridge, touching it again does nothing once open; `"close"` — a
+`−`-marked one-way switch that only ever closes it; omit `action` entirely
+for the normal toggle behavior), a list of `bridge` cells that start closed
+(void) and flip to floor when the switch is touched, and an initial `open`
 state.
 
 ```js

@@ -41,8 +41,10 @@ function proj(X, Y, Z = 0) {
 
 let testMode = false;
 let testLevelObj = null;
+let levelGeneration = 0; // bumped on every level load, so stale animation loops can detect a level change and bail out
 
 function applyLevel(lvl) {
+  levelGeneration++;
   grid = lvl.grid;
   gridRows = grid.length;
   gridCols = Math.max(...grid.map(r => r.length));
@@ -54,6 +56,8 @@ function applyLevel(lvl) {
   movesLabel.textContent = `Moves: 0`;
   message.textContent = "";
   message.className = "";
+  const fbBtn = document.getElementById("feedbackPromptBtn");
+  if (fbBtn) fbBtn.style.display = "none";
   sizeCanvas();
   renderStatic();
 }
@@ -123,6 +127,22 @@ function fillPoly(pts, color) {
   ctx.fill();
 }
 
+// Same as fillPoly but shades from colorA (near pts[0]) to colorB (near the
+// opposite corner) — used on top faces to fake a soft light source instead of
+// flat color, which is what actually gives the board a sense of depth.
+function fillPolyGradient(pts, colorA, colorB) {
+  const opp = pts[Math.floor(pts.length / 2)];
+  const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, opp.x, opp.y);
+  grad.addColorStop(0, colorA);
+  grad.addColorStop(1, colorB);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 function strokePoly(pts, color) {
   ctx.strokeStyle = color; ctx.lineWidth = 1;
   ctx.beginPath();
@@ -147,7 +167,7 @@ function paintTile(x, y) {
   const N = proj(cx - 0.5, cy - 0.5), E = proj(cx + 0.5, cy - 0.5);
   const S = proj(cx + 0.5, cy + 0.5), W = proj(cx - 0.5, cy + 0.5);
   if (ch === "G") {
-    fillPoly([N, E, S, W], "#3a2a22");
+    fillPolyGradient([N, E, S, W], "#1a1a1a", "#000000");
     strokePoly([N, E, S, W], "#d97757");
   } else {
     const Sb = { x: S.x, y: S.y + THICK };
@@ -156,13 +176,24 @@ function paintTile(x, y) {
     const weak = ch === "w";
     fillPoly([W, S, Sb, Wb], weak ? "#3d2418" : "#23262c");
     fillPoly([E, S, Sb, Eb], weak ? "#301b12" : "#191c20");
-    fillPoly([N, E, S, W], weak ? "#8a4a2c" : "#42464f");
+    fillPolyGradient([N, E, S, W], weak ? "#a5613a" : "#52565f", weak ? "#733c20" : "#383c44");
     if (weak) strokePoly([N, E, S, W], "#d9855b");
     if (sw) {
       const mid = { x: (N.x + S.x) / 2, y: (N.y + S.y) / 2 };
       ctx.strokeStyle = "#e0a458";
       ctx.lineWidth = 2.5;
-      if (sw.type === "hard") {
+      if (sw.action === "open") {
+        // + mark — one-way: only ever opens the bridge, never closes it
+        ctx.beginPath();
+        ctx.moveTo(mid.x - 6, mid.y); ctx.lineTo(mid.x + 6, mid.y);
+        ctx.moveTo(mid.x, mid.y - 6); ctx.lineTo(mid.x, mid.y + 6);
+        ctx.stroke();
+      } else if (sw.action === "close") {
+        // − mark — one-way: only ever closes the bridge, never opens it
+        ctx.beginPath();
+        ctx.moveTo(mid.x - 6, mid.y); ctx.lineTo(mid.x + 6, mid.y);
+        ctx.stroke();
+      } else if (sw.type === "hard") {
         // X mark — only triggers when the block is standing upright on it
         ctx.beginPath();
         ctx.moveTo(mid.x - 6, mid.y - 6); ctx.lineTo(mid.x + 6, mid.y + 6);
@@ -198,7 +229,7 @@ function boxFromCells(cellsArr) {
     cy: (minY + maxY) / 2,
     hx: (maxX - minX) / 2 - inset,
     hy: (maxY - minY) / 2 - inset,
-    zTop: standing ? 2 : 1
+    zTop: standing ? 1.8 : 0.9
   };
 }
 
@@ -248,7 +279,7 @@ function drawBlock(box, dir, phi, zDrop = 0) {
 
   fillPoly(left, "#2a4fa0");
   fillPoly(right, "#1f3a80");
-  fillPoly(top, "#3b6fd9");
+  fillPolyGradient(top, "#5f95ec", "#2f5cc4");
   strokePoly(top, "#7fa8f5");
 }
 
@@ -336,10 +367,69 @@ function playFallSound() {
   gain.connect(audioCtx.destination);
   src.start();
 }
+function playSwitchSound(opening) {
+  ensureAudio();
+  const now = audioCtx.currentTime;
+
+  // short mechanical click
+  const click = audioCtx.createOscillator();
+  const clickGain = audioCtx.createGain();
+  click.type = "square";
+  click.frequency.value = 900;
+  clickGain.gain.setValueAtTime(0.08, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  click.connect(clickGain); clickGain.connect(audioCtx.destination);
+  click.start(now); click.stop(now + 0.04);
+
+  // rising sweep when opening, falling sweep when closing
+  const sweep = audioCtx.createOscillator();
+  const sweepGain = audioCtx.createGain();
+  sweep.type = "triangle";
+  const startFreq = opening ? 220 : 420;
+  const endFreq = opening ? 520 : 180;
+  sweep.frequency.setValueAtTime(startFreq, now + 0.03);
+  sweep.frequency.exponentialRampToValueAtTime(endFreq, now + 0.22);
+  sweepGain.gain.setValueAtTime(0.0001, now + 0.03);
+  sweepGain.gain.exponentialRampToValueAtTime(0.12, now + 0.06);
+  sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+  sweep.connect(sweepGain); sweepGain.connect(audioCtx.destination);
+  sweep.start(now + 0.03); sweep.stop(now + 0.25);
+}
+
 function playWinSound() {
-  [523.25, 659.25, 783.99].forEach((f, i) =>
-    setTimeout(() => playTone(f, 0.28, "sine", 0.13), i * 90)
+  // low impact thump for weight, right as the celebration starts
+  ensureAudio();
+  const thump = audioCtx.createOscillator();
+  const thumpGain = audioCtx.createGain();
+  thump.type = "sine";
+  thump.frequency.setValueAtTime(160, audioCtx.currentTime);
+  thump.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.15);
+  thumpGain.gain.setValueAtTime(0.22, audioCtx.currentTime);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+  thump.connect(thumpGain); thumpGain.connect(audioCtx.destination);
+  thump.start(); thump.stop(audioCtx.currentTime + 0.18);
+
+  // triumphant ascending flourish
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
+    setTimeout(() => playTone(f, i === 3 ? 0.4 : 0.28, "sine", i === 3 ? 0.16 : 0.13), i * 85)
   );
+}
+
+function playMetalRollSound() {
+  ensureAudio();
+  const now = audioCtx.currentTime;
+  // inharmonic frequencies (not simple integer ratios) — this is what gives
+  // it a metallic "clank" character instead of a musical, resonant tone
+  [380, 540, 710].forEach((f, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(0.06 - i * 0.015, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.13);
+  });
 }
 
 function roll(dir) {
@@ -350,10 +440,13 @@ function roll(dir) {
   const willFall = next.some(c => charAt(c.x, c.y) === ".");
   const breaksWeak = !willFall && next.length === 1 && charAt(next[0].x, next[0].y) === "w";
   const failing = willFall || breaksWeak;
+  const safeOnWeak = !failing && next.some(c => charAt(c.x, c.y) === "w");
 
   // Trigger the sound the instant the move starts, not after the tip animation
   // finishes — we already know the outcome, no need to wait to reveal it.
-  if (failing) playFallSound(); else playRollSound();
+  if (failing) playFallSound();
+  else if (safeOnWeak) playMetalRollSound();
+  else playRollSound();
 
   const startBox = boxFromCells(cells);
   animating = true;
@@ -380,7 +473,15 @@ function roll(dir) {
           const touching = cells.some(c => c.x === sw.pos.x && c.y === sw.pos.y);
           const standingOnIt = cells.length === 1 && cells[0].x === sw.pos.x && cells[0].y === sw.pos.y;
           const triggers = sw.type === "hard" ? standingOnIt : touching;
-          if (triggers) sw.open = !sw.open;
+          if (!triggers) continue;
+          let newOpen;
+          if (sw.action === "open") newOpen = true;
+          else if (sw.action === "close") newOpen = false;
+          else newOpen = !sw.open; // default: toggle, same as before
+          if (newOpen !== sw.open) {
+            sw.open = newOpen;
+            playSwitchSound(sw.open);
+          }
         }
         renderStatic();
         checkWin();
@@ -489,20 +590,111 @@ function fallAndReset(box, dir) {
   requestAnimationFrame(frame);
 }
 
+function showWinBanner(text) {
+  const flash = document.getElementById("winFlash");
+  flash.classList.remove("show");
+  void flash.offsetWidth;
+  flash.classList.add("show");
+
+  const el = document.getElementById("winBanner");
+  const textEl = el.querySelector(".winBannerText");
+  textEl.textContent = text;
+  el.classList.remove("show");
+  void el.offsetWidth; // restart the CSS animation
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1400);
+}
+
+function playWinAnimation(winCells) {
+  const myGen = levelGeneration;
+  const box = boxFromCells(winCells);
+  const holeY = proj(box.cx, box.cy, 0).y; // fixed screen line at the hole's opening
+  const origin = proj(winCells[0].x + 0.5, winCells[0].y + 0.5, 20);
+  const colors = ["#3b6fd9", "#e0a458", "#6fcf97", "#e07856", "#7fa8f5", "#ffe9b3", "#d97757"];
+  const particles = [];
+  for (let i = 0; i < 60; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 70 + Math.random() * 150;
+    particles.push({
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 90,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: 4 + Math.random() * 6,
+      rot: Math.random() * Math.PI * 2,
+      spin: (Math.random() - 0.5) * 14,
+      shape: Math.random() < 0.5 ? "square" : "circle"
+    });
+  }
+  const t0 = performance.now();
+  const CONFETTI_DUR = 1200;
+  const SINK_DUR = 550; // the block finishes sinking into the hole well before confetti ends
+
+  function frame(now) {
+    if (levelGeneration !== myGen) return; // a new level already loaded — stop immediately, don't overwrite it
+
+    const dt = now - t0;
+    const t = dt / 1000;
+    const confettiRaw = Math.min(1, dt / CONFETTI_DUR);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawTiles();
+
+    // Sink the winning block down into the hole, clipped at the opening line so
+    // it visibly disappears from the bottom up as it drops below — not a fade.
+    if (dt < SINK_DUR) {
+      const sinkRaw = dt / SINK_DUR;
+      const zDrop = sinkRaw * sinkRaw * 2.6;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, canvas.width, holeY);
+      ctx.clip();
+      drawBlock(box, null, 0, zDrop);
+      ctx.restore();
+    }
+
+    particles.forEach(p => {
+      const px = origin.x + p.vx * t;
+      const py = origin.y + p.vy * t + 0.5 * 280 * t * t;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - confettiRaw);
+      ctx.translate(px, py);
+      ctx.rotate(p.rot + p.spin * t);
+      ctx.fillStyle = p.color;
+      if (p.shape === "square") {
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
+    if (confettiRaw < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
 function checkWin() {
   if (cells.length === 1 && charAt(cells[0].x, cells[0].y) === "G") {
     locked = true;
     playWinSound();
+    playWinAnimation(cells);
     if (testMode) {
+      showWinBanner("Solved!");
       message.textContent = `Solved in ${moves} moves! (test level)`;
       message.className = "win";
     } else if (levelIndex < levels.length - 1) {
+      showWinBanner("Level Complete!");
       message.textContent = `Solved in ${moves} moves! Next level…`;
       message.className = "win";
       setTimeout(() => loadLevel(levelIndex + 1), 900);
     } else {
-      message.textContent = `All levels solved — ${moves} moves on this one. Nice. Hit Restart to play again.`;
+      showWinBanner("You beat every level!");
+      message.textContent = `All levels solved — ${moves} moves on this one. Nice.`;
       message.className = "win";
+      const fbBtn = document.getElementById("feedbackPromptBtn");
+      if (fbBtn) fbBtn.style.display = "inline-block";
     }
   }
 }

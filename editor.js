@@ -18,7 +18,7 @@ const exportOutput = document.getElementById("editorExportOutput");
 function updateHint() {
   if (linkingIndex !== null) {
     editorHint.textContent = "Click cells to link as this switch's bridge — click the switch's own tile again to finish.";
-  } else if (currentTool === "switchO" || currentTool === "switchX") {
+  } else if (["switchO", "switchX", "switchOpen", "switchClose"].includes(currentTool)) {
     editorHint.textContent = "Click a cell to place a switch, or click an existing switch to edit its links.";
   } else {
     editorHint.textContent = "";
@@ -52,7 +52,9 @@ function renderEditorGrid() {
       }
       if (sw) {
         cell.classList.add("switchMark");
-        if (sw.type === "hard") cell.classList.add("hard");
+        if (sw.action === "open") cell.classList.add("openOnly");
+        else if (sw.action === "close") cell.classList.add("closeOnly");
+        else if (sw.type === "hard") cell.classList.add("hard");
       }
       if (editorStart && editorStart.x === x && editorStart.y === y) cell.classList.add("isStart");
       cell.addEventListener("click", () => handleCellClick(x, y));
@@ -91,13 +93,17 @@ function handleCellClick(x, y) {
   }
 
   // ---- Placing / re-opening a switch ----
-  if (currentTool === "switchO" || currentTool === "switchX") {
+  if (["switchO", "switchX", "switchOpen", "switchClose"].includes(currentTool)) {
     const existing = switchAt(x, y);
     if (existing) {
       linkingIndex = editorSwitches.indexOf(existing);
     } else {
       editorGridData[y][x] = "#";
-      editorSwitches.push({ pos: { x, y }, type: currentTool === "switchO" ? "soft" : "hard", bridge: [] });
+      const sw = { pos: { x, y }, type: "soft", bridge: [] };
+      if (currentTool === "switchX") sw.type = "hard";
+      if (currentTool === "switchOpen") sw.action = "open";
+      if (currentTool === "switchClose") sw.action = "close";
+      editorSwitches.push(sw);
       linkingIndex = editorSwitches.length - 1;
     }
     updateHint();
@@ -201,12 +207,16 @@ function computeTrimmedLevel() {
   }
   const result = { grid: rows, start: { x: editorStart.x - minX, y: editorStart.y - minY } };
   if (editorSwitches.length > 0) {
-    result.switches = editorSwitches.map(s => ({
-      pos: { x: s.pos.x - minX, y: s.pos.y - minY },
-      type: s.type,
-      bridge: s.bridge.map(b => ({ x: b.x - minX, y: b.y - minY })),
-      open: false
-    }));
+    result.switches = editorSwitches.map(s => {
+      const out = {
+        pos: { x: s.pos.x - minX, y: s.pos.y - minY },
+        type: s.type,
+        bridge: s.bridge.map(b => ({ x: b.x - minX, y: b.y - minY })),
+        open: false
+      };
+      if (s.action) out.action = s.action;
+      return out;
+    });
   }
   return result;
 }
@@ -227,7 +237,7 @@ document.getElementById("editorExportBtn").addEventListener("click", () => {
   let switchesBlock = "";
   if (lvl.switches) {
     const swLines = lvl.switches.map(s =>
-      `      { pos: { x: ${s.pos.x}, y: ${s.pos.y} }, type: "${s.type}", bridge: [${s.bridge.map(b => `{ x: ${b.x}, y: ${b.y} }`).join(", ")}], open: false }`
+      `      { pos: { x: ${s.pos.x}, y: ${s.pos.y} }, type: "${s.type}"${s.action ? `, action: "${s.action}"` : ""}, bridge: [${s.bridge.map(b => `{ x: ${b.x}, y: ${b.y} }`).join(", ")}], open: false }`
     ).join(",\n");
     switchesBlock = `,\n    switches: [\n${swLines}\n    ]`;
   }
