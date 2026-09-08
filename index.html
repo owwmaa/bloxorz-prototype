@@ -78,7 +78,6 @@
     <div id="playArea">
       <canvas id="board"></canvas>
       <div id="winFlash"></div>
-      <div id="winBanner"><div class="winBannerText"></div></div>
     </div>
     <div id="message"></div>
     <button id="feedbackPromptBtn" class="primaryBtn" style="display:none">Give Feedback</button>
@@ -96,6 +95,21 @@
       </div>
       <p>Land <b>standing upright</b> on the glowing tile to win.</p>
       <button id="dismissIntroBtn" class="primaryBtn">Got it</button>
+    </div>
+  </div>
+
+  <div id="winModal">
+    <div class="winModalBox">
+      <div class="winModalTitle"></div>
+      <div class="winModalStars">
+        <span class="star">★</span><span class="star">★</span><span class="star">★</span>
+      </div>
+      <div class="winModalMoves"></div>
+      <div class="winModalBest"></div>
+      <div class="winModalActions">
+        <button id="winRestartBtn" class="circleBtn" title="Restart">↻</button>
+        <button id="winNextBtn" class="circleBtn primaryCircle" title="Next">▶</button>
+      </div>
     </div>
   </div>
 

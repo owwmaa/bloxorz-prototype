@@ -58,6 +58,7 @@ function applyLevel(lvl) {
   message.className = "";
   const fbBtn = document.getElementById("feedbackPromptBtn");
   if (fbBtn) fbBtn.style.display = "none";
+  document.getElementById("winModal").classList.remove("show");
   sizeCanvas();
   renderStatic();
 }
@@ -166,13 +167,15 @@ function paintTile(x, y) {
   const cx = x + 0.5, cy = y + 0.5;
   const N = proj(cx - 0.5, cy - 0.5), E = proj(cx + 0.5, cy - 0.5);
   const S = proj(cx + 0.5, cy + 0.5), W = proj(cx - 0.5, cy + 0.5);
+  const Sb = { x: S.x, y: S.y + THICK };
+  const Eb = { x: E.x, y: E.y + THICK };
+  const Wb = { x: W.x, y: W.y + THICK };
   if (ch === "G") {
+    fillPoly([W, S, Sb, Wb], "#000000");
+    fillPoly([E, S, Sb, Eb], "#000000");
     fillPolyGradient([N, E, S, W], "#1a1a1a", "#000000");
     strokePoly([N, E, S, W], "#d97757");
   } else {
-    const Sb = { x: S.x, y: S.y + THICK };
-    const Eb = { x: E.x, y: E.y + THICK };
-    const Wb = { x: W.x, y: W.y + THICK };
     const weak = ch === "w";
     fillPoly([W, S, Sb, Wb], weak ? "#3d2418" : "#23262c");
     fillPoly([E, S, Sb, Eb], weak ? "#301b12" : "#191c20");
@@ -590,57 +593,27 @@ function fallAndReset(box, dir) {
   requestAnimationFrame(frame);
 }
 
-function showWinBanner(text) {
+function flashScreen() {
   const flash = document.getElementById("winFlash");
   flash.classList.remove("show");
   void flash.offsetWidth;
   flash.classList.add("show");
-
-  const el = document.getElementById("winBanner");
-  const textEl = el.querySelector(".winBannerText");
-  textEl.textContent = text;
-  el.classList.remove("show");
-  void el.offsetWidth; // restart the CSS animation
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 1400);
 }
 
-function playWinAnimation(winCells) {
+// Sinks the winning block down into the hole, clipped at the opening line so it
+// visibly disappears from the bottom up as it drops below — not a fade.
+function playSinkAnimation(winCells) {
   const myGen = levelGeneration;
   const box = boxFromCells(winCells);
-  const holeY = proj(box.cx, box.cy, 0).y; // fixed screen line at the hole's opening
-  const origin = proj(winCells[0].x + 0.5, winCells[0].y + 0.5, 20);
-  const colors = ["#3b6fd9", "#e0a458", "#6fcf97", "#e07856", "#7fa8f5", "#ffe9b3", "#d97757"];
-  const particles = [];
-  for (let i = 0; i < 60; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 70 + Math.random() * 150;
-    particles.push({
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 90,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      size: 4 + Math.random() * 6,
-      rot: Math.random() * Math.PI * 2,
-      spin: (Math.random() - 0.5) * 14,
-      shape: Math.random() < 0.5 ? "square" : "circle"
-    });
-  }
+  const holeY = proj(box.cx, box.cy, 0).y;
   const t0 = performance.now();
-  const CONFETTI_DUR = 1200;
-  const SINK_DUR = 550; // the block finishes sinking into the hole well before confetti ends
+  const SINK_DUR = 550;
 
   function frame(now) {
-    if (levelGeneration !== myGen) return; // a new level already loaded — stop immediately, don't overwrite it
-
+    if (levelGeneration !== myGen) return; // a new level already loaded — stop, don't overwrite it
     const dt = now - t0;
-    const t = dt / 1000;
-    const confettiRaw = Math.min(1, dt / CONFETTI_DUR);
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawTiles();
-
-    // Sink the winning block down into the hole, clipped at the opening line so
-    // it visibly disappears from the bottom up as it drops below — not a fade.
     if (dt < SINK_DUR) {
       const sinkRaw = dt / SINK_DUR;
       const zDrop = sinkRaw * sinkRaw * 2.6;
@@ -650,52 +623,93 @@ function playWinAnimation(winCells) {
       ctx.clip();
       drawBlock(box, null, 0, zDrop);
       ctx.restore();
+      requestAnimationFrame(frame);
     }
-
-    particles.forEach(p => {
-      const px = origin.x + p.vx * t;
-      const py = origin.y + p.vy * t + 0.5 * 280 * t * t;
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, 1 - confettiRaw);
-      ctx.translate(px, py);
-      ctx.rotate(p.rot + p.spin * t);
-      ctx.fillStyle = p.color;
-      if (p.shape === "square") {
-        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-      } else {
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    });
-
-    if (confettiRaw < 1) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+// ---- Best-moves-per-level tracking (localStorage) ----
+const BEST_MOVES_KEY = "bloxorz_best_moves";
+function getBestMoves(idx) {
+  try { return (JSON.parse(localStorage.getItem(BEST_MOVES_KEY)) || {})[idx]; }
+  catch { return undefined; }
+}
+function saveBestMovesIfBetter(idx, movesTaken) {
+  try {
+    const data = JSON.parse(localStorage.getItem(BEST_MOVES_KEY)) || {};
+    if (data[idx] === undefined || movesTaken < data[idx]) {
+      data[idx] = movesTaken;
+      localStorage.setItem(BEST_MOVES_KEY, JSON.stringify(data));
+    }
+  } catch { /* localStorage unavailable — best-moves just won't persist */ }
+}
+
+function starsForMoves(movesTaken, par) {
+  if (movesTaken <= par) return 3;
+  if (movesTaken <= par + 3) return 2;
+  return 1;
+}
+
+function showWinModal({ title, stars, movesTaken, best, nextLabel, onNext }) {
+  document.querySelector(".winModalTitle").textContent = title;
+  document.querySelectorAll(".winModalStars .star").forEach((el, i) => {
+    el.classList.toggle("earned", i < stars);
+  });
+  document.querySelector(".winModalMoves").textContent = movesTaken;
+  document.querySelector(".winModalBest").textContent =
+    best !== undefined ? `Best: ${best} moves` : "";
+
+  const nextBtn = document.getElementById("winNextBtn");
+  nextBtn.textContent = nextLabel;
+  nextBtn.onclick = () => {
+    document.getElementById("winModal").classList.remove("show");
+    onNext();
+  };
+  document.getElementById("winRestartBtn").onclick = () => {
+    document.getElementById("winModal").classList.remove("show");
+    reloadCurrent();
+  };
+
+  document.getElementById("winModal").classList.add("show");
 }
 
 function checkWin() {
   if (cells.length === 1 && charAt(cells[0].x, cells[0].y) === "G") {
     locked = true;
     playWinSound();
-    playWinAnimation(cells);
-    if (testMode) {
-      showWinBanner("Solved!");
-      message.textContent = `Solved in ${moves} moves! (test level)`;
-      message.className = "win";
-    } else if (levelIndex < levels.length - 1) {
-      showWinBanner("Level Complete!");
-      message.textContent = `Solved in ${moves} moves! Next level…`;
-      message.className = "win";
-      setTimeout(() => loadLevel(levelIndex + 1), 900);
-    } else {
-      showWinBanner("You beat every level!");
-      message.textContent = `All levels solved — ${moves} moves on this one. Nice.`;
-      message.className = "win";
-      const fbBtn = document.getElementById("feedbackPromptBtn");
-      if (fbBtn) fbBtn.style.display = "inline-block";
-    }
+    flashScreen();
+    playSinkAnimation(cells);
+
+    const lvl = testMode ? testLevelObj : levels[levelIndex];
+    const par = (lvl && lvl.par) || 8;
+    const stars = starsForMoves(moves, par);
+
+    if (!testMode) saveBestMovesIfBetter(levelIndex, moves);
+    const best = testMode ? undefined : getBestMoves(levelIndex);
+
+    setTimeout(() => {
+      if (testMode) {
+        showWinModal({
+          title: "Test Level — Solved", stars, movesTaken: moves, best,
+          nextLabel: "↺", onNext: () => reloadCurrent()
+        });
+      } else if (levelIndex < levels.length - 1) {
+        showWinModal({
+          title: `Level ${levelIndex + 1} Complete`, stars, movesTaken: moves, best,
+          nextLabel: "▶", onNext: () => loadLevel(levelIndex + 1)
+        });
+      } else {
+        showWinModal({
+          title: "All Levels Complete", stars, movesTaken: moves, best,
+          nextLabel: "★", onNext: () => {
+            if (typeof showScreen === "function") {
+              showScreen(document.getElementById("feedbackScreen"));
+            }
+          }
+        });
+      }
+    }, 650);
   }
 }
 

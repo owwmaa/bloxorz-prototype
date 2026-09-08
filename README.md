@@ -44,7 +44,9 @@ the ☰ button in the HUD returns to the home screen at any time.
 
 ## Level format
 
-Each level is a grid of characters plus a start position:
+Each level is a grid of characters plus a start position, and an optional
+`par` (the move count for a 3-star rating on the win screen — 2 stars up to
+par+3, 1 star beyond that; defaults to 8 if omitted):
 
 - `#` floor
 - `.` void (falling off resets the level)
