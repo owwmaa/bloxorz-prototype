@@ -129,7 +129,9 @@ h1 {
 #hud {
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
   font-size: 14px;
   color: #b8b4a8;
   background: rgba(60, 100, 160, 0.08);
@@ -147,7 +149,7 @@ h1 {
   cursor: pointer;
 }
 #menuBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
-#skipBtn, #restartBtn {
+#skipBtn, #restartBtn, #hintBtn, #muteBtn {
   background: none;
   border: 1px solid #44483f;
   color: #a8a498;
@@ -157,8 +159,9 @@ h1 {
   cursor: pointer;
 }
 #restartBtn { margin-left: auto; }
-#skipBtn:hover, #restartBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
+#skipBtn:hover, #restartBtn:hover, #hintBtn:hover, #muteBtn:hover { border-color: #6a6d5f; color: #cdc9bd; }
 #skipBtn:disabled { opacity: 0.35; cursor: default; }
+#muteBtn.muted { color: #e07856; border-color: #e07856; }
 #app { height: 90vh; height: 90dvh; }
 #playArea {
   display: flex;
@@ -171,6 +174,22 @@ h1 {
   overflow: hidden;
   position: relative;
 }
+#hintArrow {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  color: #ffcf4d;
+  text-shadow: 0 0 12px rgba(255, 210, 90, 0.9), 0 0 26px rgba(255, 180, 60, 0.6);
+  pointer-events: none;
+  display: none;
+  animation: hintPulse 1s ease-in-out infinite;
+  z-index: 40;
+}
+@keyframes hintPulse {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.9); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+#hintBtn.active { background: rgba(255, 210, 90, 0.15); border-color: #ffcf4d; color: #ffcf4d; }
 #winFlash {
   position: absolute;
   inset: 0;

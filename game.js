@@ -59,6 +59,9 @@ function applyLevel(lvl) {
   const fbBtn = document.getElementById("feedbackPromptBtn");
   if (fbBtn) fbBtn.style.display = "none";
   document.getElementById("winModal").classList.remove("show");
+  hintActive = false;
+  document.getElementById("hintBtn").classList.remove("active");
+  document.getElementById("hintArrow").style.display = "none";
   sizeCanvas();
   renderStatic();
 }
@@ -117,7 +120,10 @@ function fitCanvasDisplay() {
   canvas.style.width = (canvas.width * scale) + "px";
   canvas.style.height = (canvas.height * scale) + "px";
 }
-window.addEventListener("resize", fitCanvasDisplay);
+window.addEventListener("resize", () => {
+  fitCanvasDisplay();
+  if (typeof updateHintArrow === "function") updateHintArrow();
+});
 
 function fillPoly(pts, color) {
   ctx.fillStyle = color;
@@ -347,7 +353,13 @@ function ensureAudio() {
   }
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
+
+// ---- Mute (persisted) — gated at the two shared entry points every sound goes through ----
+let muted = false;
+try { muted = localStorage.getItem("bloxorz_muted") === "1"; } catch {}
+
 function playTone(freq, dur, type, gainAmt) {
+  if (muted) return;
   ensureAudio();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -360,6 +372,7 @@ function playTone(freq, dur, type, gainAmt) {
 }
 function playRollSound() { playTone(140, 0.09, "square", 0.10); }
 function playFallSound() {
+  if (muted) return;
   ensureAudio();
   if (!fallBuffer) return; // recording hasn't finished loading yet — skip silently
   const src = audioCtx.createBufferSource();
@@ -371,6 +384,7 @@ function playFallSound() {
   src.start();
 }
 function playSwitchSound(opening) {
+  if (muted) return;
   ensureAudio();
   const now = audioCtx.currentTime;
 
@@ -400,6 +414,7 @@ function playSwitchSound(opening) {
 }
 
 function playWinSound() {
+  if (muted) return;
   // low impact thump for weight, right as the celebration starts
   ensureAudio();
   const thump = audioCtx.createOscillator();
@@ -419,6 +434,7 @@ function playWinSound() {
 }
 
 function playMetalRollSound() {
+  if (muted) return;
   ensureAudio();
   const now = audioCtx.currentTime;
   // inharmonic frequencies (not simple integer ratios) — this is what gives
@@ -488,6 +504,7 @@ function roll(dir) {
         }
         renderStatic();
         checkWin();
+        updateHintArrow();
       }
     }
   }
@@ -680,6 +697,7 @@ function checkWin() {
     playWinSound();
     flashScreen();
     playSinkAnimation(cells);
+    document.getElementById("hintArrow").style.display = "none";
 
     const lvl = testMode ? testLevelObj : levels[levelIndex];
     const par = (lvl && lvl.par) || 8;
@@ -734,6 +752,98 @@ restartBtn.addEventListener("click", () => {
 
 document.getElementById("menuBtn").addEventListener("click", () => {
   if (typeof showScreen === "function") showScreen(document.getElementById("homeScreen"));
+});
+
+// ---- Mute button ----
+const muteBtn = document.getElementById("muteBtn");
+function updateMuteBtn() {
+  muteBtn.textContent = muted ? "🔇" : "🔊";
+  muteBtn.classList.toggle("muted", muted);
+}
+updateMuteBtn();
+muteBtn.addEventListener("click", () => {
+  muted = !muted;
+  try { localStorage.setItem("bloxorz_muted", muted ? "1" : "0"); } catch {}
+  updateMuteBtn();
+});
+
+// ---- Hint button ----
+// A real solver (breadth-first search over the same roll physics the game itself
+// uses, including switch state), not pre-written per-level hints — so it works
+// correctly on every level, including anything built later in the editor.
+function hintCharAt(x, y, switchOpen) {
+  for (let i = 0; i < switchState.length; i++) {
+    const sw = switchState[i];
+    if (sw.bridge.some(b => b.x === x && b.y === y)) return switchOpen[i] ? "#" : ".";
+  }
+  return charAt(x, y);
+}
+function hintStep(cellsState, switchOpen, dir) {
+  const next = computeRoll(dir, cellsState);
+  if (!next) return null;
+  if (next.some(c => hintCharAt(c.x, c.y, switchOpen) === ".")) return null;
+  if (next.length === 1 && hintCharAt(next[0].x, next[0].y, switchOpen) === "w") return null;
+  const newSwitchOpen = switchOpen.slice();
+  switchState.forEach((sw, i) => {
+    const touching = next.some(c => c.x === sw.pos.x && c.y === sw.pos.y);
+    const standingOnIt = next.length === 1 && next[0].x === sw.pos.x && next[0].y === sw.pos.y;
+    const triggers = sw.type === "hard" ? standingOnIt : touching;
+    if (triggers) {
+      if (sw.action === "open") newSwitchOpen[i] = true;
+      else if (sw.action === "close") newSwitchOpen[i] = false;
+      else newSwitchOpen[i] = !switchOpen[i];
+    }
+  });
+  return { cells: next, switchOpen: newSwitchOpen };
+}
+function hintStateKey(cellsState, switchOpen) {
+  return cellsState.map(c => `${c.x},${c.y}`).sort().join("|") + "#" + switchOpen.map(b => b ? 1 : 0).join("");
+}
+function findHintDirection() {
+  const startSwitchOpen = switchState.map(sw => sw.open);
+  const visited = new Set([hintStateKey(cells, startSwitchOpen)]);
+  const queue = [{ cellsState: cells, switchOpen: startSwitchOpen, firstDir: null }];
+  for (let qi = 0; qi < queue.length && qi < 20000; qi++) {
+    const cur = queue[qi];
+    if (cur.cellsState.length === 1 && hintCharAt(cur.cellsState[0].x, cur.cellsState[0].y, cur.switchOpen) === "G") {
+      return cur.firstDir;
+    }
+    for (const dir of ["up", "down", "left", "right"]) {
+      const res = hintStep(cur.cellsState, cur.switchOpen, dir);
+      if (!res) continue;
+      const key = hintStateKey(res.cells, res.switchOpen);
+      if (visited.has(key)) continue;
+      visited.add(key);
+      queue.push({ cellsState: res.cells, switchOpen: res.switchOpen, firstDir: cur.firstDir || dir });
+    }
+  }
+  return null;
+}
+const hintGlyph = { up: "↗", right: "↘", down: "↙", left: "↖" };
+let hintActive = false;
+
+function updateHintArrow() {
+  const el = document.getElementById("hintArrow");
+  if (!hintActive) { el.style.display = "none"; return; }
+  const dir = findHintDirection();
+  if (!dir) { el.style.display = "none"; return; }
+
+  const box = boxFromCells(cells);
+  const p = proj(box.cx, box.cy, box.zTop + 0.6); // ~24px above the block's top, in tile-units
+  const canvasRect = canvas.getBoundingClientRect();
+  const playRect = playArea.getBoundingClientRect();
+  const scaleX = canvasRect.width / canvas.width;
+  const scaleY = canvasRect.height / canvas.height;
+  el.style.left = ((canvasRect.left - playRect.left) + p.x * scaleX) + "px";
+  el.style.top = ((canvasRect.top - playRect.top) + p.y * scaleY) + "px";
+  el.textContent = hintGlyph[dir];
+  el.style.display = "block";
+}
+
+document.getElementById("hintBtn").addEventListener("click", () => {
+  hintActive = !hintActive;
+  document.getElementById("hintBtn").classList.toggle("active", hintActive);
+  updateHintArrow();
 });
 
 const playArea = document.getElementById("playArea");
