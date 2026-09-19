@@ -91,3 +91,17 @@ document.getElementById("backFromFeedbackBtn").addEventListener("click", () => {
 document.getElementById("feedbackPromptBtn").addEventListener("click", () => {
   showScreen(feedbackScreen);
 });
+
+// ---- NEW: arcade mode home-screen buttons ----
+// startArcade()/genMicroPuzzle() live in game.js, alongside the rest of the
+// arcade mode logic — kept together there rather than split across files.
+document.getElementById("timeAttackBtn").addEventListener("click", () => {
+  showScreen(gameScreen);
+  startArcade("time");
+  maybeShowIntro();
+});
+document.getElementById("streakBtn").addEventListener("click", () => {
+  showScreen(gameScreen);
+  startArcade("streak");
+  maybeShowIntro();
+});
