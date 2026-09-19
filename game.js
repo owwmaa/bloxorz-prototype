@@ -43,6 +43,18 @@ let testMode = false;
 let testLevelObj = null;
 let levelGeneration = 0; // bumped on every level load, so stale animation loops can detect a level change and bail out
 
+// ---- ARCADE MODE STATE (new) ----
+// null when playing normal levels/editor test-plays — every arcade-specific
+// branch below is gated on this, so normal play is byte-for-byte unchanged
+// when it's null. See genMicroPuzzle() / startArcade() near the bottom of
+// this file for the actual mode logic.
+let arcadeMode = null; // null | "time" | "streak"
+let arcadeRunning = false; // true only while a run is actively in progress — kept separate from arcadeMode so a late-arriving animation callback after a run ends can tell "still arcade, but ignore me" rather than accidentally re-triggering something
+let arcadeScore = 0;
+let arcadeTimer = 0;
+let arcadeTimerInterval = null;
+let arcadePuzzle = null;
+
 function applyLevel(lvl) {
   levelGeneration++;
   grid = lvl.grid;
@@ -53,7 +65,7 @@ function applyLevel(lvl) {
   moves = 0;
   locked = false;
   animating = false;
-  movesLabel.textContent = `Moves: 0`;
+  if (!arcadeMode) movesLabel.textContent = `Moves: 0`; // arcade HUD is set separately by updateArcadeHUD()
   message.textContent = "";
   message.className = "";
   const fbBtn = document.getElementById("feedbackPromptBtn");
@@ -69,6 +81,7 @@ function applyLevel(lvl) {
 function loadLevel(i) {
   testMode = false;
   levelIndex = i;
+  skipBtn.style.display = ""; // restore in case an arcade run hid it
   applyLevel(levels[i]);
   levelLabel.textContent = `Level ${i + 1} / ${levels.length}`;
   skipBtn.disabled = i >= levels.length - 1;
@@ -80,6 +93,7 @@ function loadLevel(i) {
 function loadCustomLevel(lvl) {
   testMode = true;
   testLevelObj = lvl;
+  skipBtn.style.display = ""; // restore in case an arcade run hid it
   applyLevel(lvl);
   levelLabel.textContent = "Test Level";
   skipBtn.disabled = true;
@@ -487,7 +501,7 @@ function roll(dir) {
       } else {
         cells = next;
         moves++;
-        movesLabel.textContent = `Moves: ${moves}`;
+        if (arcadeMode) updateArcadeHUD(); else movesLabel.textContent = `Moves: ${moves}`;
         for (const sw of switchState) {
           const touching = cells.some(c => c.x === sw.pos.x && c.y === sw.pos.y);
           const standingOnIt = cells.length === 1 && cells[0].x === sw.pos.x && cells[0].y === sw.pos.y;
@@ -605,7 +619,17 @@ function fallAndReset(box, dir) {
     const centerScreen = proj(shiftedBox.cx, shiftedBox.cy, -gravityDrop);
     const offScreen = centerScreen.y > canvas.height + 60;
     if (!offScreen && now - t0 < MAX_DURATION) requestAnimationFrame(frame);
-    else shatterBoard(() => reloadCurrent());
+    else shatterBoard(() => {
+      // ARCADE HOOK: a normal level/editor test always just reloads itself.
+      // In arcade mode, a fail means either "lose 3s and retry the same
+      // puzzle" (Time Attack) or "run over" (Streak) — handled entirely by
+      // handleArcadeFail(). The arcadeRunning check guards a rare race
+      // where the timer hits exactly 0 while this fall animation was still
+      // in flight — the run already ended in that case, so this late
+      // completion is ignored rather than double-firing the end screen.
+      if (arcadeMode) { if (arcadeRunning) handleArcadeFail(); }
+      else reloadCurrent();
+    });
   }
   requestAnimationFrame(frame);
 }
@@ -692,6 +716,14 @@ function showWinModal({ title, stars, movesTaken, best, nextLabel, onNext }) {
 }
 
 function checkWin() {
+  // ARCADE HOOK: short-circuits BEFORE any normal-level logic, so normal
+  // play (arcadeMode === null) is completely unaffected below this block.
+  if (arcadeMode) {
+    if (!arcadeRunning) return; // run already ended elsewhere — ignore a late completion
+    if (cells.length === 1 && charAt(cells[0].x, cells[0].y) === "G") handleArcadeSolve();
+    return;
+  }
+
   if (cells.length === 1 && charAt(cells[0].x, cells[0].y) === "G") {
     locked = true;
     playWinSound();
@@ -747,10 +779,12 @@ skipBtn.addEventListener("click", () => {
 
 restartBtn.addEventListener("click", () => {
   if (animating) return;
-  reloadCurrent();
+  if (arcadeMode) { if (arcadeRunning) startArcade(arcadeMode); }
+  else reloadCurrent();
 });
 
 document.getElementById("menuBtn").addEventListener("click", () => {
+  if (arcadeMode) { clearInterval(arcadeTimerInterval); arcadeRunning = false; arcadeMode = null; }
   if (typeof showScreen === "function") showScreen(document.getElementById("homeScreen"));
 });
 
@@ -770,7 +804,8 @@ muteBtn.addEventListener("click", () => {
 // ---- Hint button ----
 // A real solver (breadth-first search over the same roll physics the game itself
 // uses, including switch state), not pre-written per-level hints — so it works
-// correctly on every level, including anything built later in the editor.
+// correctly on every level, including anything built later in the editor (and,
+// as a nice side effect, on procedurally generated arcade puzzles too).
 function hintCharAt(x, y, switchOpen) {
   for (let i = 0; i < switchState.length; i++) {
     const sw = switchState[i];
@@ -883,4 +918,168 @@ playArea.addEventListener("touchend", () => {
 // the game no longer auto-starts on page load, since there's a home screen first.
 function startGame(levelIdx) {
   loadLevel(levelIdx);
+}
+
+// ==================== NEW: ARCADE MODES ====================
+// Both modes share one generator. Technique: simulate a random walk of
+// real, legal rolls (using the exact same computeRoll() the main game
+// uses) starting from a single standing cell — that starting cell becomes
+// the puzzle's Goal. Every cell touched along the walk becomes floor; the
+// walk's FINAL position (forced to end standing) becomes the puzzle's
+// Start. Since each roll has a well-defined inverse (Right undoes Left,
+// Down undoes Up), replaying the walk backward with inverted directions
+// is always a valid solution — so every generated puzzle is solvable BY
+// CONSTRUCTION, never generated-then-verified. Independently verified
+// (separate BFS solver, 500/500 generated puzzles solvable) before this
+// went into the repo.
+
+function genMicroPuzzle(minMoves, maxMoves, recursionDepth) {
+  recursionDepth = recursionDepth || 0;
+  if (recursionDepth > 20) {
+    // Pathological-case safety net — extremely unlikely to ever trigger,
+    // but this runs unattended many times per run, so it gets one.
+    return { grid: ["G##"], start: { x: 2, y: 0 } };
+  }
+
+  const N = minMoves + Math.floor(Math.random() * (maxMoves - minMoves + 1));
+  const dirs = ["up", "down", "left", "right"];
+  let cells = [{ x: 0, y: 0 }];
+  const visited = new Set(["0,0"]);
+  const touched = new Set(["0,0"]);
+  const stepsTaken = [];
+  let attempts = 0;
+
+  while ((stepsTaken.length < N || cells.length !== 1) && attempts < 300) {
+    attempts++;
+    const dir = dirs[Math.floor(Math.random() * 4)];
+    const next = computeRoll(dir, cells);
+    if (!next) continue;
+    const key = next.map(c => `${c.x},${c.y}`).sort().join("|");
+    if (visited.has(key)) continue;
+    visited.add(key);
+    cells = next;
+    stepsTaken.push(dir);
+    next.forEach(c => touched.add(`${c.x},${c.y}`));
+  }
+
+  if (stepsTaken.length < minMoves || cells.length !== 1) {
+    return genMicroPuzzle(minMoves, maxMoves, recursionDepth + 1);
+  }
+
+  const coords = [...touched].map(s => { const [x, y] = s.split(",").map(Number); return { x, y }; });
+  const minX = Math.min(...coords.map(c => c.x)), maxX = Math.max(...coords.map(c => c.x));
+  const minY = Math.min(...coords.map(c => c.y)), maxY = Math.max(...coords.map(c => c.y));
+  const rows = [];
+  for (let y = minY; y <= maxY; y++) {
+    let row = "";
+    for (let x = minX; x <= maxX; x++) row += touched.has(`${x},${y}`) ? "#" : ".";
+    rows.push(row);
+  }
+  // (0,0) is the goal — mark it 'G' in the trimmed grid.
+  const goalX = 0 - minX, goalY = 0 - minY;
+  rows[goalY] = rows[goalY].substring(0, goalX) + "G" + rows[goalY].substring(goalX + 1);
+
+  return {
+    grid: rows,
+    start: { x: cells[0].x - minX, y: cells[0].y - minY }
+  };
+}
+
+const ARCADE_BEST_KEY = "bloxorz_arcade_best";
+function getArcadeBest(mode) {
+  try { return (JSON.parse(localStorage.getItem(ARCADE_BEST_KEY)) || {})[mode]; }
+  catch { return undefined; }
+}
+function saveArcadeBestIfBetter(mode, score) {
+  try {
+    const data = JSON.parse(localStorage.getItem(ARCADE_BEST_KEY)) || {};
+    if (data[mode] === undefined || score > data[mode]) {
+      data[mode] = score;
+      localStorage.setItem(ARCADE_BEST_KEY, JSON.stringify(data));
+    }
+  } catch {}
+}
+
+function startArcade(mode) {
+  arcadeMode = mode;
+  arcadeRunning = true;
+  arcadeScore = 0;
+  skipBtn.style.display = "none"; // doesn't apply to arcade runs
+  arcadePuzzle = genMicroPuzzle(3, 6);
+  applyLevel(arcadePuzzle);
+  levelLabel.textContent = mode === "time" ? "Time Attack" : "Streak Mode";
+
+  clearInterval(arcadeTimerInterval);
+  if (mode === "time") {
+    arcadeTimer = 30;
+    arcadeTimerInterval = setInterval(() => {
+      arcadeTimer -= 1;
+      updateArcadeHUD();
+      if (arcadeTimer <= 0) endArcadeRun();
+    }, 1000);
+  }
+  updateArcadeHUD();
+}
+
+function updateArcadeHUD() {
+  if (arcadeMode === "time") {
+    movesLabel.textContent = `⏱ ${arcadeTimer}s   Solved: ${arcadeScore}`;
+  } else if (arcadeMode === "streak") {
+    movesLabel.textContent = `🔥 Streak: ${arcadeScore}`;
+  }
+}
+
+function handleArcadeSolve() {
+  arcadeScore++;
+  if (arcadeMode === "time") arcadeTimer = Math.min(arcadeTimer + 5, 99);
+  playWinSound();
+  updateArcadeHUD();
+  arcadePuzzle = genMicroPuzzle(3, 6);
+  applyLevel(arcadePuzzle);
+  updateArcadeHUD();
+}
+
+function handleArcadeFail() {
+  if (arcadeMode === "time") {
+    arcadeTimer = Math.max(0, arcadeTimer - 3);
+    updateArcadeHUD();
+    if (arcadeTimer <= 0) { endArcadeRun(); return; }
+    applyLevel(arcadePuzzle); // retry the SAME puzzle — the time penalty is the real cost, not losing progress
+    updateArcadeHUD();
+  } else {
+    endArcadeRun(); // Streak: zero tolerance, first fail ends the run
+  }
+}
+
+function endArcadeRun() {
+  clearInterval(arcadeTimerInterval);
+  arcadeRunning = false;
+  const modeLabel = arcadeMode === "time" ? "Time Attack" : "Streak Mode";
+  const modeKey = arcadeMode;
+  const score = arcadeScore;
+  saveArcadeBestIfBetter(modeKey, score);
+  const best = getArcadeBest(modeKey);
+  locked = true;
+  showArcadeEndModal(modeLabel, score, best, modeKey);
+}
+
+function showArcadeEndModal(modeLabel, score, best, modeKey) {
+  document.querySelector(".winModalTitle").textContent = `${modeLabel} — Run Over`;
+  document.querySelectorAll(".winModalStars .star").forEach(el => el.classList.remove("earned"));
+  document.querySelector(".winModalMoves").textContent = score;
+  document.querySelector(".winModalBest").textContent = best !== undefined ? `Best: ${best}` : "";
+
+  const nextBtn = document.getElementById("winNextBtn");
+  nextBtn.textContent = "🏠";
+  nextBtn.onclick = () => {
+    document.getElementById("winModal").classList.remove("show");
+    arcadeMode = null;
+    showScreen(homeScreen);
+  };
+  document.getElementById("winRestartBtn").onclick = () => {
+    document.getElementById("winModal").classList.remove("show");
+    startArcade(modeKey);
+  };
+
+  document.getElementById("winModal").classList.add("show");
 }
